@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Launcher: runs the TUI under Bun.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+exec bun run "$HERE/../src/index.tsx" "$@"

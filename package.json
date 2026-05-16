@@ -1,0 +1,61 @@
+{
+  "name": "worktree-cleanup",
+  "version": "0.1.0",
+  "description": "Interactive TUI to triage and remove stale git worktrees. Built for repos with many concurrent worktrees.",
+  "license": "MIT",
+  "author": "Felipe Torres <fforres@gmail.com>",
+  "homepage": "https://github.com/fforres/worktree-cleanup#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fforres/worktree-cleanup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fforres/worktree-cleanup/issues"
+  },
+  "keywords": [
+    "git",
+    "worktree",
+    "git-worktree",
+    "cli",
+    "tui",
+    "cleanup",
+    "github",
+    "bun",
+    "opentui"
+  ],
+  "type": "module",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "bin": {
+    "worktree-cleanup": "./bin/worktree-cleanup"
+  },
+  "files": [
+    "bin",
+    "src",
+    "tsconfig.json",
+    "README.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "bun run src/index.tsx",
+    "dev": "bun run src/index.tsx",
+    "build": "bun build --compile --minify src/index.tsx --outfile dist/worktree-cleanup",
+    "install:local": "bun run build && mkdir -p \"$HOME/.local/bin\" && cp dist/worktree-cleanup \"$HOME/.local/bin/worktree-cleanup\" && echo \"Installed to $HOME/.local/bin/worktree-cleanup (make sure ~/.local/bin is on your PATH)\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.2.12",
+    "@opentui/react": "^0.2.12",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.21",
+    "@types/react": "^19.0.7",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
