@@ -17,23 +17,41 @@ function wt(partial: Partial<Worktree>): Worktree {
   };
 }
 
-describe("performDeletes (no-op)", () => {
-  it("returns one outcome per input, always ok=true, never touches disk", async () => {
+describe("performDeletes — dry-run mode", () => {
+  it("returns one outcome per input, never touches disk", async () => {
     const items = [wt({ path: "/a" }), wt({ path: "/b", dirty: true })];
-    const out = await performDeletes(items);
+    const out = await performDeletes(items, { dryRun: true });
     expect(out).toHaveLength(2);
-    expect(out.every((o) => o.ok)).toBe(true);
   });
 
-  it("flags dirty worktrees in the message", async () => {
-    const out = await performDeletes([wt({ path: "/dirty", dirty: true })]);
+  it("flags dirty worktrees and skips them even in dry-run", async () => {
+    const out = await performDeletes([wt({ path: "/dirty", dirty: true })], {
+      dryRun: true,
+    });
+    expect(out[0]!.ok).toBe(false);
     expect(out[0]!.message).toContain("uncommitted");
-    expect(out[0]!.message).toContain("noop");
   });
 
-  it("uses the git worktree remove form for clean trees", async () => {
-    const out = await performDeletes([wt({ path: "/clean" })]);
+  it("uses the git worktree remove form for clean trees in dry-run", async () => {
+    const out = await performDeletes([wt({ path: "/clean" })], { dryRun: true });
+    expect(out[0]!.ok).toBe(true);
+    expect(out[0]!.message).toContain("dry-run");
     expect(out[0]!.message).toContain("git worktree remove /clean");
-    expect(out[0]!.message).toContain("noop");
+  });
+});
+
+describe("performDeletes — real mode", () => {
+  it("refuses dirty worktrees without spawning git", async () => {
+    const out = await performDeletes([wt({ path: "/dirty", dirty: true })]);
+    expect(out[0]!.ok).toBe(false);
+    expect(out[0]!.message).toContain("uncommitted");
+    expect(out[0]!.message).not.toContain("dry-run");
+  });
+
+  it("reports FAILED when git exits non-zero for a bogus path", async () => {
+    // Use a clearly invalid path so git exits non-zero without touching anything real.
+    const out = await performDeletes([wt({ path: "/this/path/does/not/exist/42" })]);
+    expect(out[0]!.ok).toBe(false);
+    expect(out[0]!.message).toContain("FAILED");
   });
 });

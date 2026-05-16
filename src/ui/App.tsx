@@ -13,10 +13,11 @@ type Phase =
 
 interface Props {
   result: DiscoverResult;
+  dryRun: boolean;
   onExit: (final: Phase) => void;
 }
 
-export function App({ result, onExit }: Props): React.ReactNode {
+export function App({ result, dryRun, onExit }: Props): React.ReactNode {
   const renderer = useRenderer();
   const [phase, setPhase] = useState<Phase>({ kind: "selecting" });
   const [initial] = useState<ReadonlySet<number>>(() => {
@@ -58,7 +59,7 @@ export function App({ result, onExit }: Props): React.ReactNode {
         selected={phase.selected}
         rootPath={result.root}
         onConfirm={async () => {
-          const outcomes = await performDeletes(phase.selected);
+          const outcomes = await performDeletes(phase.selected, { dryRun });
           setPhase({ kind: "done", outcomes });
         }}
         onCancel={() => setPhase({ kind: "done", outcomes: [], cancelled: true })}

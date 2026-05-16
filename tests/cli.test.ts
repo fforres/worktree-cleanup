@@ -70,6 +70,11 @@ describe("parseArgs", () => {
     expect(parseArgs([".", "--discover-only"]).discoverOnly).toBe(true);
   });
 
+  it("--dry-run defaults off and flips on when passed", () => {
+    expect(parseArgs(["."]).options.dryRun).toBe(false);
+    expect(parseArgs([".", "--dry-run"]).options.dryRun).toBe(true);
+  });
+
   it("rejects a second positional argument", () => {
     expect(() => parseArgs([".", "/tmp/other"])).toThrow(CliError);
   });

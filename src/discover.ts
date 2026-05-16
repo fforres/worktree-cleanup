@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { buildWorktree } from "./classify.ts";
+import { buildWorktree, compareWorktrees } from "./classify.ts";
 import {
   fetchPrune,
   getAllUpstreams,
+  getLocalState,
   getRemoteBranches,
   getRemoteUrl,
-  isDirty,
   listWorktrees,
 } from "./git.ts";
 import { branchUrl, fetchPrInfo, ghAvailable } from "./github.ts";
@@ -45,7 +45,7 @@ export async function discover(
   onProgress?.(`analyzing ${raw.length} worktrees (concurrency=${opts.concurrency})`);
 
   const worktrees = await pMap(raw, opts.concurrency, async (r) => {
-    const dirty = await isDirty(r.path);
+    const local = await getLocalState(r.path);
     const upstream = r.branch ? (upstreams.get(r.branch) ?? null) : null;
     let pr: Worktree["pr"] = null;
     if (opts.withPrs && ghOk && r.branch && (remoteBranches.has(r.branch) || upstream)) {
@@ -64,9 +64,12 @@ export async function discover(
       protectedPatterns: opts.extraProtected,
       pr,
       remoteUrl: remoteBranchUrl,
-      dirty,
+      dirty: local.dirty,
+      ahead: local.ahead,
+      behind: local.behind,
     });
   });
 
+  worktrees.sort(compareWorktrees);
   return { root: opts.root, mainWt, worktrees, remoteUrl, ghAvailable: ghOk };
 }

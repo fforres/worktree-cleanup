@@ -32,6 +32,8 @@ export interface Worktree extends RawWorktree {
   pr?: PrInfo | null;
   remoteUrl?: string;
   dirty?: boolean;
+  ahead?: number | null;
+  behind?: number | null;
 }
 
 export interface AppOptions {
@@ -40,4 +42,5 @@ export interface AppOptions {
   withPrs: boolean;
   concurrency: number;
   extraProtected: string[];
+  dryRun: boolean;
 }

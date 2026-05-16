@@ -127,8 +127,11 @@ Key bindings inside the TUI:
 | `space` | Toggle selection on the current row |
 | `a` | Toggle ALL toggleable rows |
 | `d` | Reset to default preselection |
+| `o` | Open the current row's PR/remote URL in your default browser |
 | `enter` | Proceed to confirmation |
 | `q` / `esc` / `ctrl-c` | Quit |
+
+> ℹ Click-to-open in the terminal doesn't work inside a TUI like this one — when an app captures mouse events, the terminal's URL handler is bypassed. Use `o` to open the focused row's URL via your system browser instead.
 
 ### Examples
 
@@ -164,12 +167,11 @@ worktree-cleanup . --discover-only --no-fetch | jq 'group_by(.status) | map({sta
 
 ## Safety
 
-The current build is intentionally **conservative**:
-
-- The actual delete step is a no-op. After confirmation, it prints `[noop] WOULD run: git worktree remove …` lines instead of running them. To turn it on, edit `src/delete.ts` — that is the only place that needs to change. (This is so the tool is safe to try on real repos before you trust it.)
+- **Pass `--dry-run` for a no-op preview**. The tool prints `[dry-run] WOULD run: git worktree remove …` lines instead of running them. Recommended for first runs on a new folder.
 - **Local branches are never deleted** — only the worktree directory. `git worktree remove` does not touch `refs/heads/<branch>`, so resurrecting a worktree is `git worktree add <path> <branch>` away.
-- **Dirty worktrees are skipped**. The tool refuses to pass `--force` to `git worktree remove`; if there are uncommitted changes, the row is flagged with `*` and the message says `WOULD refuse to remove`.
-- **Protected branches cannot be toggled**. The checkbox renders as `▪` and the `space` key is a no-op on those rows.
+- **Dirty worktrees are skipped**. The tool refuses to pass `--force` to `git worktree remove`; if there are uncommitted changes, the row is flagged with `*` and the worktree is left alone.
+- **Protected branches cannot be toggled**. The checkbox renders as `🔒` and the `space` key is a no-op on those rows.
+- **Git's worktree admin state is cleaned up** along with the directory. `git worktree remove` deletes the `.git/worktrees/<name>/` admin folder, so the branch is no longer "in use" elsewhere afterward.
 
 ## How "REMOTE_DELETED" is decided
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { classify, isImmutable, locationOf } from "../src/classify.ts";
+import { classify, compareWorktrees, isImmutable, locationOf } from "../src/classify.ts";
 import { DEFAULT_PROTECTED } from "../src/protected.ts";
-import type { RawWorktree } from "../src/types.ts";
+import type { RawWorktree, Status, Worktree } from "../src/types.ts";
 
 const ROOT = "/repos/worktrees";
 const MAIN = `${ROOT}/main`;
@@ -34,6 +34,48 @@ describe("isImmutable", () => {
     for (const s of ["REMOTE_DELETED", "REMOTE_EXISTS", "NEVER_PUSHED", "DETACHED"] as const) {
       expect(isImmutable(s)).toBe(false);
     }
+  });
+});
+
+describe("compareWorktrees", () => {
+  const wt = (status: Status, branch: string | null): Worktree => ({
+    path: `/wt/${branch ?? "detached"}`,
+    sha: "abc",
+    branch,
+    locked: false,
+    prunable: false,
+    status,
+    location: "FIRST_LAYER",
+    reason: "",
+    defaultSelected: false,
+  });
+  it("groups by status: MAIN, PROTECTED, DETACHED, NEVER_PUSHED, REMOTE_EXISTS, REMOTE_DELETED", () => {
+    const items: Worktree[] = [
+      wt("REMOTE_DELETED", "old"),
+      wt("MAIN_WORKTREE", "main"),
+      wt("REMOTE_EXISTS", "active"),
+      wt("PROTECTED", "release/2026"),
+      wt("DETACHED", null),
+      wt("NEVER_PUSHED", "wip"),
+    ];
+    items.sort(compareWorktrees);
+    expect(items.map((i) => i.status)).toEqual([
+      "MAIN_WORKTREE",
+      "PROTECTED",
+      "DETACHED",
+      "NEVER_PUSHED",
+      "REMOTE_EXISTS",
+      "REMOTE_DELETED",
+    ]);
+  });
+  it("within a group, sorts by branch name", () => {
+    const items: Worktree[] = [
+      wt("REMOTE_DELETED", "zeta"),
+      wt("REMOTE_DELETED", "alpha"),
+      wt("REMOTE_DELETED", "mu"),
+    ];
+    items.sort(compareWorktrees);
+    expect(items.map((i) => i.branch)).toEqual(["alpha", "mu", "zeta"]);
   });
 });
 

@@ -35,6 +35,8 @@ OPTIONS
   --protect <pattern>    Add a branch pattern to the protected list. Repeatable.
                          Patterns support '*' (non-slash) and '**' (any).
                          Defaults: ${DEFAULT_PROTECTED.join(", ")}
+  --dry-run              Don't actually remove anything; print what would
+                         happen. Recommended for first runs on a new folder.
   --discover-only        Print a JSON discovery report and exit. Useful for
                          piping or for verifying behavior in non-TTY envs.
   -h, --help             Show this help.
@@ -50,7 +52,8 @@ KEY BINDINGS (in the table)
   ↑ / ↓                  Move cursor
   space                  Toggle selection on the current row
   a                      Toggle ALL rows
-  d                      Toggle only the default-suggested rows
+  d                      Reset to default selection
+  o                      Open the current row's PR/remote URL in your browser
   enter                  Proceed to confirmation
   q / ctrl-c             Quit without doing anything
 `;
@@ -63,6 +66,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     withPrs: true,
     concurrency: defaultConcurrency(cpus().length),
     extraProtected: [...DEFAULT_PROTECTED],
+    dryRun: false,
   };
   let showHelp = false;
   let showVersion = false;
@@ -99,6 +103,9 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
         break;
       case "--discover-only":
         discoverOnly = true;
+        break;
+      case "--dry-run":
+        options.dryRun = true;
         break;
       default:
         if (a.startsWith("-")) {

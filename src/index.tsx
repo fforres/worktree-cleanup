@@ -80,6 +80,7 @@ async function main(): Promise<void> {
     createRoot(renderer).render(
       <App
         result={result}
+        dryRun={options.dryRun}
         onExit={(phase) => {
           if (exited) return;
           exited = true;
@@ -100,6 +101,9 @@ async function main(): Promise<void> {
   process.stdout.write(`\nResults (${finalOutcomes.length}):\n`);
   for (const o of finalOutcomes) {
     process.stdout.write(`  ${o.message}\n`);
+  }
+  if (options.dryRun) {
+    process.stdout.write("\n(dry-run: nothing was actually removed)\n");
   }
 }
 

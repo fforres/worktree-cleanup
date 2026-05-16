@@ -1,7 +1,24 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { memo, useMemo, useState } from "react";
+import { platform } from "node:os";
 import type { Worktree } from "../types.ts";
-import { COLORS, STATUS_META, relPath, truncate } from "./util.ts";
+import { run } from "../spawn.ts";
+import { CHECKBOX, COLORS, STATUS_META, relPath, stateFlags, truncate } from "./util.ts";
+
+/** Spawn the platform-native URL opener. macOS `open`, Linux `xdg-open`, Windows `start`. */
+function openExternal(url: string): void {
+  const cmd =
+    platform() === "darwin" ? ["open", url]
+    : platform() === "win32" ? ["cmd", "/c", "start", "", url]
+    : ["xdg-open", url];
+  // Fire and forget — never block the UI on the spawn result.
+  void run(cmd, { allowFail: true });
+}
+
+function urlFor(wt: Worktree | undefined): string | null {
+  if (!wt) return null;
+  return wt.pr?.url ?? wt.remoteUrl ?? null;
+}
 
 interface Props {
   worktrees: readonly Worktree[];
@@ -17,16 +34,18 @@ interface ColumnWidths {
   location: number;
   path: number;
   branch: number;
+  state: number;
 }
 
 function computeWidths(terminalWidth: number): ColumnWidths {
   const usable = Math.max(40, terminalWidth - 4);
-  const checkbox = 3;
+  const checkbox = 4; // "[✓] "
   const status = 15;
   const location = 12;
-  const remaining = Math.max(20, usable - checkbox - status - location - 3);
+  const state = 8; // "*↑99↓99" worst-case-ish
+  const remaining = Math.max(20, usable - checkbox - status - location - state - 4);
   const path = Math.floor(remaining * 0.55);
-  return { checkbox, status, location, path, branch: remaining - path };
+  return { checkbox, status, location, path, branch: remaining - path, state };
 }
 
 export function Table({
@@ -89,6 +108,11 @@ export function Table({
         });
       case "d":
         return setSelected(new Set(initialSelected));
+      case "o": {
+        const url = urlFor(worktrees[cursor]);
+        if (url) openExternal(url);
+        return;
+      }
       case "return":
         return onConfirm(selected);
       case "q":
@@ -141,35 +165,55 @@ function columnHeaders(w: ColumnWidths): string {
     "STATUS".padEnd(w.status) +
     "LOC".padEnd(w.location) +
     "PATH".padEnd(w.path) +
-    "BRANCH"
+    "BRANCH".padEnd(w.branch) +
+    "STATE"
   );
 }
 
 function Header({ total, selectedCount }: { total: number; selectedCount: number }): React.ReactNode {
+  // flexShrink: 0 on every text — workaround for opentui issue #435 where
+  // sibling text elements in a flex container shrink and overlap each other.
   return (
     <box
       style={{
-        flexDirection: "row",
+        flexDirection: "column",
         borderStyle: "single",
         paddingLeft: 1,
         paddingRight: 1,
+        flexShrink: 0,
       }}
     >
-      <text fg={COLORS.headingFg} attributes={1}>
-        worktree-cleanup
+      <text style={{ flexShrink: 0 }}>
+        <span fg={COLORS.headingFg} attributes={1}>worktree-cleanup</span>
+        <span fg={COLORS.hintFg}>  ({selectedCount}/{total} selected)</span>
       </text>
-      <text fg={COLORS.hintFg}>
-        {"  "}({selectedCount}/{total} selected)
-      </text>
+      <box style={{ flexDirection: "row", flexShrink: 0 }}>
+        <text style={{ flexShrink: 0 }} fg={COLORS.checkboxSelected} attributes={1}>
+          {CHECKBOX.selected}
+        </text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>{" delete   "}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.checkboxUnselected}>
+          {CHECKBOX.unselected}
+        </text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>{" keep   "}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.checkboxLocked}>{CHECKBOX.locked}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>{" locked   "}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.errorFg}>{"*"}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>{" dirty   "}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>{"↑N"}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>{" ahead   "}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>{"↓N"}</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>{" behind"}</text>
+      </box>
     </box>
   );
 }
 
 function Footer(): React.ReactNode {
   return (
-    <box style={{ flexDirection: "row", paddingLeft: 1, paddingRight: 1, paddingTop: 1 }}>
-      <text fg={COLORS.hintFg}>
-        ↑/↓ move · space toggle · a all · d reset defaults · enter confirm · q quit
+    <box style={{ flexDirection: "row", paddingLeft: 1, paddingRight: 1, paddingTop: 1, flexShrink: 0 }}>
+      <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>
+        ↑/↓ move · space toggle · a all · d reset · o open URL · enter confirm · q quit
       </text>
     </box>
   );
@@ -189,23 +233,46 @@ const Row = memo(function Row({
   widths: ColumnWidths;
 }): React.ReactNode {
   const meta = STATUS_META[wt.status];
-  const checkbox = meta.immutable ? "▪" : selected ? "■" : "□";
+  const checkbox = meta.immutable
+    ? CHECKBOX.locked
+    : selected
+      ? CHECKBOX.selected
+      : CHECKBOX.unselected;
+  const checkboxFg = onCursor
+    ? COLORS.cursorFg
+    : meta.immutable
+      ? COLORS.checkboxLocked
+      : selected
+        ? COLORS.checkboxSelected
+        : COLORS.checkboxUnselected;
+  const checkboxAttrs = !onCursor && selected ? 1 : 0;
   const path = relPath(wt.path, rootPath);
-  const branch = (wt.branch ?? "(detached)") + (wt.dirty ? " *" : "");
-  const line =
-    checkbox.padEnd(widths.checkbox) +
+  const branch = wt.branch ?? "(detached)";
+  const state = stateFlags(wt);
+  const rest =
     truncate(wt.status, widths.status - 1).padEnd(widths.status) +
     truncate(wt.location, widths.location - 1).padEnd(widths.location) +
     truncate(path, widths.path - 1).padEnd(widths.path) +
-    truncate(branch, widths.branch);
-  const fg = onCursor
+    truncate(branch, widths.branch - 1).padEnd(widths.branch);
+  const restFg = onCursor
     ? COLORS.cursorFg
     : meta.immutable
       ? COLORS.disabledFg
       : meta.color;
+  const stateFg = onCursor
+    ? COLORS.cursorFg
+    : wt.dirty
+      ? COLORS.errorFg
+      : COLORS.warningFg;
   return (
-    <text fg={fg} bg={onCursor ? COLORS.cursorBg : "transparent"}>
-      {line}
+    <text bg={onCursor ? COLORS.cursorBg : "transparent"}>
+      <span fg={checkboxFg} attributes={checkboxAttrs}>
+        {checkbox.padEnd(widths.checkbox)}
+      </span>
+      <span fg={restFg}>{rest}</span>
+      <span fg={stateFg} attributes={state && !onCursor ? 1 : 0}>
+        {truncate(state, widths.state)}
+      </span>
     </text>
   );
 });
@@ -219,23 +286,53 @@ function Detail({ wt, rootPath }: { wt: Worktree | undefined; rootPath: string }
         borderStyle: "single",
         paddingLeft: 1,
         paddingRight: 1,
+        flexShrink: 0,
       }}
     >
-      <text fg={COLORS.headingFg} attributes={1}>
+      <text style={{ flexShrink: 0 }} fg={COLORS.headingFg} attributes={1}>
         {relPath(wt.path, rootPath)}
       </text>
-      <text fg={COLORS.detailMuted}>reason: {wt.reason}</text>
-      <text fg={COLORS.detailMuted}>local:  {wt.path}</text>
-      <text fg={wt.remoteUrl ? COLORS.detailMuted : COLORS.detailFainter}>
+      <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>reason: {wt.reason}</text>
+      <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>local:  {wt.path}</text>
+      {/*
+        Render URLs as plain text — not opentui's <a href>. Ghostty has a known
+        bug (ghostty-org/ghostty#11907) where Cmd+Click on OSC 8 hyperlinks is
+        ignored, but plain-text URLs go through its built-in URL matcher and DO
+        open on Cmd+Click. iTerm2/WezTerm/Kitty/Alacritty all handle plain URLs
+        the same way, so this is also the most portable option.
+      */}
+      <text style={{ flexShrink: 0 }} fg={wt.remoteUrl ? COLORS.detailMuted : COLORS.detailFainter}>
         remote: {wt.remoteUrl ?? "(not on origin)"}
       </text>
       {wt.pr ? (
-        <text fg={COLORS.detailMuted}>
+        <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>
           PR #{wt.pr.number} {wt.pr.state} — {wt.pr.title}
         </text>
       ) : null}
+      {wt.pr ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>
+          {wt.pr.url}
+        </text>
+      ) : null}
+      {urlFor(wt) ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>
+          press `o` to open this URL in your browser
+        </text>
+      ) : null}
       {wt.dirty ? (
-        <text fg={COLORS.errorFg}>uncommitted changes in this worktree (*)</text>
+        <text style={{ flexShrink: 0 }} fg={COLORS.errorFg}>
+          * uncommitted changes in this worktree
+        </text>
+      ) : null}
+      {wt.ahead && wt.ahead > 0 ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>
+          ↑ {wt.ahead} commit{wt.ahead === 1 ? "" : "s"} not pushed to upstream
+        </text>
+      ) : null}
+      {wt.behind && wt.behind > 0 ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>
+          ↓ {wt.behind} commit{wt.behind === 1 ? "" : "s"} behind upstream
+        </text>
       ) : null}
     </box>
   );

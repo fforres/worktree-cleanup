@@ -10,6 +10,19 @@ export const COLORS = {
   hintFg: "#888",
   errorFg: "#ff6b6b",
   warningFg: "#ffd43b",
+  checkboxSelected: "#22c55e",
+  checkboxUnselected: "#555",
+  checkboxLocked: "#5588aa",
+} as const;
+
+// NB: keep these three values the same visual width — both string .length and
+// terminal column width — so the row grid stays aligned without per-glyph
+// padding logic. " 🔒 " is a surrogate-pair (length 4) AND 4 columns wide, which
+// happens to match 1"[✓]" / "[ ]" at length 3 / 3 cols when padded to 4.
+export const CHECKBOX = {
+  selected: "[✓]",
+  unselected: "[ ]",
+  locked: " 🔒 ",
 } as const;
 
 export const STATUS_META: Record<Status, { color: string; immutable: boolean }> = {
@@ -29,4 +42,22 @@ export function truncate(s: string, n: number): string {
   if (s.length <= n) return s;
   if (n <= 1) return s.slice(0, n);
   return s.slice(0, n - 1) + "…";
+}
+
+/**
+ * Compact flag string for the STATE column. Empty when everything's clean.
+ *   '*'   uncommitted changes
+ *   '↑N'  N commits in HEAD not in upstream
+ *   '↓N'  N commits in upstream not in HEAD
+ */
+export function stateFlags(args: {
+  dirty?: boolean;
+  ahead?: number | null;
+  behind?: number | null;
+}): string {
+  const parts: string[] = [];
+  if (args.dirty) parts.push("*");
+  if (args.ahead && args.ahead > 0) parts.push(`↑${args.ahead}`);
+  if (args.behind && args.behind > 0) parts.push(`↓${args.behind}`);
+  return parts.join("");
 }

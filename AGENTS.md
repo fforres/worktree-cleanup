@@ -95,14 +95,12 @@ If the flag affects discovery, plumb it through `AppOptions` in `types.ts`; if i
 
 ## Safety contract
 
-**Delete is a no-op by design.** `src/delete.ts::performDeletes` returns `[noop] WOULD run: …` strings instead of executing `git worktree remove`. Do **not** wire up real deletion without:
+`src/delete.ts::performDeletes` runs `git worktree remove <path>` for real by default. Two non-negotiable guards must stay in place:
 
-1. A clear ask from the user / a release issue tracking the change.
-2. A confirmation in `Confirm.tsx` that's hard to dismiss accidentally.
-3. A guard that refuses dirty worktrees (currently enforced because we don't pass `--force`).
-4. A `--dry-run` flag that preserves the current no-op behavior.
+1. **Dirty trees are never removed.** We refuse to pass `--force`. If `wt.dirty` is true the row is skipped before any subprocess is spawned. If you ever consider passing `--force`, that's a separate, explicit user-facing flag — never the default.
+2. **`--dry-run` always works as a no-op preview.** `performDeletes(items, { dryRun: true })` must never spawn anything. The flag is parsed in `cli.ts`, threaded through `AppOptions.dryRun` and `App` props, and ends in the call site inside `App.tsx`. Don't shortcut around it.
 
-The README and AGENTS.md sell the tool's safety; breaking that contract is a breaking change.
+Removing or weakening either guard is a breaking change — bump version and update README + this file before merging.
 
 ## Distribution
 
@@ -114,6 +112,8 @@ Two channels:
 If you change the public surface (flags, exit codes, output format), bump the version per semver and update both `package.json` and `src/cli.ts::VERSION`.
 
 ## Things that have bitten us before
+
+- **opentui flex containers shrink text children by default.** When you put multiple `<text>` (or `<box>` with a single `<text>`) elements in a flex parent, they'll overlap when the parent doesn't have enough room. Always set `style={{ flexShrink: 0 }}` on text nodes inside a flex column/row whose total content height/width approaches the container size. Tracking: [opentui#435](https://github.com/anomalyco/opentui/issues/435).
 
 - **Lowercase `<text>` / `<box>` are intrinsics, not React components.** Capitalizing them silently routes through `React.createElement("Text", …)` which renders as nothing.
 - **Bun's `Response(proc.stdout).text()` must be awaited together with `proc.exited`** — not after. Sequentially awaiting blocks on `proc.exited` first which can deadlock if the child writes more than a pipe buffer. See `src/spawn.ts` for the `Promise.all` pattern that gets it right.

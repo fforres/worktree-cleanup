@@ -12,6 +12,26 @@ export function isImmutable(status: Status): boolean {
   return status === "PROTECTED" || status === "MAIN_WORKTREE";
 }
 
+/**
+ * Display order for the table. Anchors (MAIN, PROTECTED) come first, then
+ * items that need user judgment, then REMOTE_DELETED at the bottom — those
+ * are the bulk of "select all and confirm".
+ */
+const STATUS_ORDER: Record<Status, number> = {
+  MAIN_WORKTREE: 0,
+  PROTECTED: 1,
+  DETACHED: 2,
+  NEVER_PUSHED: 3,
+  REMOTE_EXISTS: 4,
+  REMOTE_DELETED: 5,
+};
+
+export function compareWorktrees(a: Worktree, b: Worktree): number {
+  const byStatus = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+  if (byStatus !== 0) return byStatus;
+  return (a.branch ?? "").localeCompare(b.branch ?? "");
+}
+
 export interface ClassifyInput {
   raw: RawWorktree;
   mainWt: string;
@@ -66,7 +86,13 @@ export function classify(input: ClassifyInput): Classification {
 }
 
 export function buildWorktree(
-  input: ClassifyInput & { pr?: Worktree["pr"]; remoteUrl?: string; dirty?: boolean },
+  input: ClassifyInput & {
+    pr?: Worktree["pr"];
+    remoteUrl?: string;
+    dirty?: boolean;
+    ahead?: number | null;
+    behind?: number | null;
+  },
 ): Worktree {
   const cls = classify(input);
   return {
@@ -79,5 +105,7 @@ export function buildWorktree(
     pr: input.pr ?? null,
     remoteUrl: input.remoteUrl,
     dirty: input.dirty,
+    ahead: input.ahead,
+    behind: input.behind,
   };
 }
