@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stateFlags, truncate } from "../src/ui/util.ts";
+import { isRowLocked, needsForceConfirm, stateFlags, truncate } from "../src/ui/util.ts";
 
 describe("stateFlags", () => {
   it("is empty when everything is clean", () => {
@@ -21,6 +21,29 @@ describe("stateFlags", () => {
   });
   it("ignores zero ahead/behind", () => {
     expect(stateFlags({ dirty: true, ahead: 0, behind: 0 })).toBe("*");
+  });
+});
+
+describe("isRowLocked", () => {
+  it("only MAIN_WORKTREE is locked — everything else is selectable", () => {
+    expect(isRowLocked("MAIN_WORKTREE")).toBe(true);
+    for (const s of ["PROTECTED", "REMOTE_DELETED", "REMOTE_EXISTS", "NEVER_PUSHED", "DETACHED"] as const) {
+      expect(isRowLocked(s)).toBe(false);
+    }
+  });
+});
+
+describe("needsForceConfirm", () => {
+  it("true for dirty rows", () => {
+    expect(needsForceConfirm({ status: "REMOTE_DELETED", dirty: true })).toBe(true);
+  });
+  it("true for PROTECTED rows even when clean", () => {
+    expect(needsForceConfirm({ status: "PROTECTED", dirty: false })).toBe(true);
+  });
+  it("false for clean non-PROTECTED rows", () => {
+    for (const s of ["REMOTE_DELETED", "REMOTE_EXISTS", "NEVER_PUSHED", "DETACHED", "MAIN_WORKTREE"] as const) {
+      expect(needsForceConfirm({ status: s, dirty: false })).toBe(false);
+    }
   });
 });
 

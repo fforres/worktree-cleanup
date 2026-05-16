@@ -8,6 +8,7 @@ describe("run", () => {
     });
     expect(r.exit).toBe(127);
     expect(r.stdout).toBe("");
+    expect(r.stderr).toBe("");
   });
 
   it("propagates the throw for missing binaries without allowFail", async () => {

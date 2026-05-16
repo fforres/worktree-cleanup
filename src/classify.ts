@@ -9,7 +9,7 @@ export function locationOf(wtPath: string, root: string, mainWt: string): Locati
 }
 
 export function isImmutable(status: Status): boolean {
-  return status === "PROTECTED" || status === "MAIN_WORKTREE";
+  return status === "MAIN_WORKTREE";
 }
 
 /**

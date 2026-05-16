@@ -26,9 +26,11 @@ describe("locationOf", () => {
 });
 
 describe("isImmutable", () => {
-  it("is true for PROTECTED and MAIN_WORKTREE", () => {
-    expect(isImmutable("PROTECTED")).toBe(true);
+  it("is true only for MAIN_WORKTREE", () => {
     expect(isImmutable("MAIN_WORKTREE")).toBe(true);
+  });
+  it("is false for PROTECTED — selectable with an extra confirm gate", () => {
+    expect(isImmutable("PROTECTED")).toBe(false);
   });
   it("is false for every other status", () => {
     for (const s of ["REMOTE_DELETED", "REMOTE_EXISTS", "NEVER_PUSHED", "DETACHED"] as const) {

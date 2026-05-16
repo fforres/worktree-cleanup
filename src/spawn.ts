@@ -5,6 +5,7 @@ export interface RunOptions {
 
 export interface RunResult {
   stdout: string;
+  stderr: string;
   exit: number;
 }
 
@@ -25,16 +26,16 @@ export async function run(
   try {
     proc = Bun.spawn(cmd as string[], spawnOpts);
   } catch (err) {
-    if (opts.allowFail) return { stdout: "", exit: 127 };
+    if (opts.allowFail) return { stdout: "", stderr: "", exit: 127 };
     throw err;
   }
-  const [stdout, exit] = await Promise.all([
+  const [stdout, stderr, exit] = await Promise.all([
     new Response(proc.stdout as ReadableStream).text(),
+    new Response(proc.stderr as ReadableStream).text(),
     proc.exited,
   ]);
   if (exit !== 0 && !opts.allowFail) {
-    const stderr = await new Response(proc.stderr as ReadableStream).text();
     throw new Error(`${cmd.join(" ")} exited ${exit}: ${stderr.trim()}`);
   }
-  return { stdout: stdout.trim(), exit };
+  return { stdout: stdout.trim(), stderr: stderr.trim(), exit };
 }

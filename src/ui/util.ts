@@ -30,9 +30,26 @@ export const STATUS_META: Record<Status, { color: string; immutable: boolean }> 
   REMOTE_EXISTS: { color: "#51cf66", immutable: false },
   NEVER_PUSHED: { color: "#ffd43b", immutable: false },
   DETACHED: { color: "#cc5de8", immutable: false },
-  PROTECTED: { color: "#74c0fc", immutable: true },
+  PROTECTED: { color: "#74c0fc", immutable: false },
   MAIN_WORKTREE: { color: "#74c0fc", immutable: true },
 };
+
+/**
+ * Only the primary worktree is truly un-deletable — removing it leaves git in a
+ * corrupt state. PROTECTED and dirty rows are *selectable*; the confirm flow
+ * gates them with an extra "are you sure?" step (see App.tsx forceConfirming).
+ */
+export function isRowLocked(status: Status): boolean {
+  return status === "MAIN_WORKTREE";
+}
+
+/** True if removing this worktree requires an extra confirmation. */
+export function needsForceConfirm(args: {
+  status: Status;
+  dirty?: boolean;
+}): boolean {
+  return Boolean(args.dirty) || args.status === "PROTECTED";
+}
 
 export function relPath(p: string, root: string): string {
   return p.startsWith(root + "/") ? p.slice(root.length + 1) : p;

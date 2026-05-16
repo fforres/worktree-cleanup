@@ -1,9 +1,18 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { platform } from "node:os";
 import type { Worktree } from "../types.ts";
 import { run } from "../spawn.ts";
-import { CHECKBOX, COLORS, STATUS_META, relPath, stateFlags, truncate } from "./util.ts";
+import {
+  CHECKBOX,
+  COLORS,
+  STATUS_META,
+  isRowLocked,
+  needsForceConfirm,
+  relPath,
+  stateFlags,
+  truncate,
+} from "./util.ts";
 
 /** Spawn the platform-native URL opener. macOS `open`, Linux `xdg-open`, Windows `start`. */
 function openExternal(url: string): void {
@@ -57,13 +66,31 @@ export function Table({
 }: Props): React.ReactNode {
   const [selected, setSelected] = useState<Set<number>>(() => new Set(initialSelected));
   const [cursor, setCursor] = useState(0);
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width } = useTerminalDimensions();
   const widths = useMemo(() => computeWidths(width), [width]);
 
   const total = worktrees.length;
 
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    };
+  }, []);
+
+  const showFlash = (msg: string) => {
+    setFlash(msg);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 3500);
+  };
+
   const toggle = (i: number) => {
-    if (STATUS_META[worktrees[i]!.status].immutable) return;
+    const wt = worktrees[i]!;
+    if (isRowLocked(wt.status)) {
+      showFlash(`🔒 Cannot delete the primary worktree — that would corrupt the repo.`);
+      return;
+    }
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
@@ -97,12 +124,12 @@ export function Table({
       case "a":
         return setSelected((prev) => {
           const allOn = worktrees.every(
-            (w, i) => STATUS_META[w.status].immutable || prev.has(i),
+            (w, i) => isRowLocked(w.status) || prev.has(i),
           );
           if (allOn) return new Set();
           const next = new Set<number>();
           worktrees.forEach((w, i) => {
-            if (!STATUS_META[w.status].immutable) next.add(i);
+            if (!isRowLocked(w.status)) next.add(i);
           });
           return next;
         });
@@ -150,11 +177,12 @@ export function Table({
             selected={selected.has(i)}
             rootPath={rootPath}
             widths={widths}
+            locked={isRowLocked(wt.status)}
           />
         ))}
       </scrollbox>
       <Detail wt={worktrees[cursor]} rootPath={rootPath} />
-      <Footer />
+      <Footer flash={flash} />
     </box>
   );
 }
@@ -170,7 +198,13 @@ function columnHeaders(w: ColumnWidths): string {
   );
 }
 
-function Header({ total, selectedCount }: { total: number; selectedCount: number }): React.ReactNode {
+function Header({
+  total,
+  selectedCount,
+}: {
+  total: number;
+  selectedCount: number;
+}): React.ReactNode {
   // flexShrink: 0 on every text — workaround for opentui issue #435 where
   // sibling text elements in a flex container shrink and overlap each other.
   return (
@@ -209,9 +243,14 @@ function Header({ total, selectedCount }: { total: number; selectedCount: number
   );
 }
 
-function Footer(): React.ReactNode {
+function Footer({ flash }: { flash: string | null }): React.ReactNode {
   return (
-    <box style={{ flexDirection: "row", paddingLeft: 1, paddingRight: 1, paddingTop: 1, flexShrink: 0 }}>
+    <box style={{ flexDirection: "column", paddingLeft: 1, paddingRight: 1, paddingTop: 1, flexShrink: 0 }}>
+      {flash ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.errorFg} attributes={1}>
+          {flash}
+        </text>
+      ) : null}
       <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>
         ↑/↓ move · space toggle · a all · d reset · o open URL · enter confirm · q quit
       </text>
@@ -225,22 +264,24 @@ const Row = memo(function Row({
   selected,
   rootPath,
   widths,
+  locked,
 }: {
   wt: Worktree;
   onCursor: boolean;
   selected: boolean;
   rootPath: string;
   widths: ColumnWidths;
+  locked: boolean;
 }): React.ReactNode {
   const meta = STATUS_META[wt.status];
-  const checkbox = meta.immutable
+  const checkbox = locked
     ? CHECKBOX.locked
     : selected
       ? CHECKBOX.selected
       : CHECKBOX.unselected;
   const checkboxFg = onCursor
     ? COLORS.cursorFg
-    : meta.immutable
+    : locked
       ? COLORS.checkboxLocked
       : selected
         ? COLORS.checkboxSelected
@@ -256,7 +297,7 @@ const Row = memo(function Row({
     truncate(branch, widths.branch - 1).padEnd(widths.branch);
   const restFg = onCursor
     ? COLORS.cursorFg
-    : meta.immutable
+    : locked
       ? COLORS.disabledFg
       : meta.color;
   const stateFg = onCursor
@@ -277,8 +318,16 @@ const Row = memo(function Row({
   );
 });
 
-function Detail({ wt, rootPath }: { wt: Worktree | undefined; rootPath: string }): React.ReactNode {
+function Detail({
+  wt,
+  rootPath,
+}: {
+  wt: Worktree | undefined;
+  rootPath: string;
+}): React.ReactNode {
   if (!wt) return null;
+  const locked = isRowLocked(wt.status);
+  const willPromptForce = needsForceConfirm(wt);
   return (
     <box
       style={{
@@ -292,7 +341,13 @@ function Detail({ wt, rootPath }: { wt: Worktree | undefined; rootPath: string }
       <text style={{ flexShrink: 0 }} fg={COLORS.headingFg} attributes={1}>
         {relPath(wt.path, rootPath)}
       </text>
-      <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>reason: {wt.reason}</text>
+      {locked ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.checkboxLocked} attributes={1}>
+          🔒 LOCKED — {wt.reason}
+        </text>
+      ) : (
+        <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>reason: {wt.reason}</text>
+      )}
       <text style={{ flexShrink: 0 }} fg={COLORS.detailMuted}>local:  {wt.path}</text>
       {/*
         Render URLs as plain text — not opentui's <a href>. Ghostty has a known
@@ -332,6 +387,11 @@ function Detail({ wt, rootPath }: { wt: Worktree | undefined; rootPath: string }
       {wt.behind && wt.behind > 0 ? (
         <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>
           ↓ {wt.behind} commit{wt.behind === 1 ? "" : "s"} behind upstream
+        </text>
+      ) : null}
+      {!locked && willPromptForce ? (
+        <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>
+          ⚠ deleting this row will trigger an extra "are you sure?" prompt
         </text>
       ) : null}
     </box>

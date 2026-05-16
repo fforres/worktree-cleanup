@@ -75,6 +75,10 @@ describe("parseArgs", () => {
     expect(parseArgs([".", "--dry-run"]).options.dryRun).toBe(true);
   });
 
+  it("--force is no longer a CLI flag (in-TUI confirm gates force)", () => {
+    expect(() => parseArgs([".", "--force"])).toThrow(CliError);
+  });
+
   it("rejects a second positional argument", () => {
     expect(() => parseArgs([".", "/tmp/other"])).toThrow(CliError);
   });

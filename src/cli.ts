@@ -11,7 +11,7 @@ export interface ParsedArgs {
   discoverOnly: boolean;
 }
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 export function helpText(): string {
   return `worktree-cleanup ${VERSION}

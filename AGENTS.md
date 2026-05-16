@@ -95,12 +95,14 @@ If the flag affects discovery, plumb it through `AppOptions` in `types.ts`; if i
 
 ## Safety contract
 
-`src/delete.ts::performDeletes` runs `git worktree remove <path>` for real by default. Two non-negotiable guards must stay in place:
+`src/delete.ts::performDeletes` runs `git worktree remove <path>` for real by default. The guards:
 
-1. **Dirty trees are never removed.** We refuse to pass `--force`. If `wt.dirty` is true the row is skipped before any subprocess is spawned. If you ever consider passing `--force`, that's a separate, explicit user-facing flag — never the default.
-2. **`--dry-run` always works as a no-op preview.** `performDeletes(items, { dryRun: true })` must never spawn anything. The flag is parsed in `cli.ts`, threaded through `AppOptions.dryRun` and `App` props, and ends in the call site inside `App.tsx`. Don't shortcut around it.
+1. **`force` is an internal option set by the in-TUI second-stage confirm.** There is no `--force` CLI flag. Whether `--force` is passed to `git worktree remove` is decided by the user's answer to `src/ui/ConfirmForce.tsx`, plumbed through `App.tsx::runDelete(items, force)` into `performDeletes(items, { force })`. Don't reintroduce a CLI flag — the gate lives in the TUI, in context, after the user has seen the exact rows that need it.
+2. **Dirty trees are skipped unless the user explicitly accepted the force-confirm.** Without `opts.force`, `wt.dirty` rows are skipped before any subprocess is spawned. `PROTECTED` rows also trigger the force-confirm gate even though git itself doesn't need `--force` for them — they're a user-configured "are you sure?" net (see `src/ui/util.ts::needsForceConfirm`).
+3. **The primary worktree (`MAIN_WORKTREE`) is never removable.** Removing it leaves git in a corrupt state. Enforced in three places: `src/ui/util.ts::isRowLocked` (the row can't be selected), `src/classify.ts::isImmutable` (single source of truth for classification), and `src/delete.ts::performDeletes` (defense in depth: even if a `MAIN_WORKTREE` row reaches `performDeletes`, it's refused before spawning, regardless of `force`).
+4. **`--dry-run` always works as a no-op preview.** `performDeletes(items, { dryRun: true })` must never spawn anything. The flag is parsed in `cli.ts`, threaded through `AppOptions.dryRun` and `App` props, and ends in the call site inside `App.tsx`. Don't shortcut around it.
 
-Removing or weakening either guard is a breaking change — bump version and update README + this file before merging.
+Removing or weakening any of these is a breaking change — bump version and update README + this file before merging.
 
 ## Distribution
 
