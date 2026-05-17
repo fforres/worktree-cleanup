@@ -1,4 +1,5 @@
 import type { Worktree } from "./types.ts";
+import { pMap } from "./parallel.ts";
 import { run } from "./spawn.ts";
 
 export interface DeleteOutcome {
@@ -25,25 +26,31 @@ export interface DeleteOptions {
   /**
    * Fires synchronously around every item so the UI can render a live
    * "deleting X…" spinner. `start` fires before spawning git; `finish` fires
-   * after the outcome is known. Items always run serially — git worktree
-   * operations can contend on the parent repo's index.
+   * after the outcome is known. Under concurrency > 1, events from different
+   * items can interleave — keyed by `index`.
    */
   onEvent?: (event: DeleteEvent) => void;
+  /**
+   * How many `git worktree remove` calls to run in parallel. `git worktree
+   * remove` only writes inside the worktree being removed and `.git/worktrees/<name>`,
+   * which are independent per item, so parallelism is safe. Default is 1
+   * (serial); callers should pass a tuned value (delete is I/O-heavy — small
+   * caps like 4-8 win over high concurrency).
+   */
+  concurrency?: number;
 }
 
 export async function performDeletes(
   selected: readonly Worktree[],
   opts: DeleteOptions = {},
 ): Promise<DeleteOutcome[]> {
-  const out: DeleteOutcome[] = [];
-  for (let i = 0; i < selected.length; i++) {
-    const wt = selected[i]!;
+  const concurrency = Math.max(1, opts.concurrency ?? 1);
+  return pMap(selected, concurrency, async (wt, i) => {
     opts.onEvent?.({ kind: "start", index: i, worktree: wt });
     const outcome = await deleteOne(wt, opts);
-    out.push(outcome);
     opts.onEvent?.({ kind: "finish", index: i, worktree: wt, outcome });
-  }
-  return out;
+    return outcome;
+  });
 }
 
 async function deleteOne(

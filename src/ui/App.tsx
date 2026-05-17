@@ -25,10 +25,11 @@ type Phase =
 interface Props {
   result: DiscoverResult;
   dryRun: boolean;
+  deleteConcurrency: number;
   onExit: (final: Phase) => void;
 }
 
-export function App({ result, dryRun, onExit }: Props): React.ReactNode {
+export function App({ result, dryRun, deleteConcurrency, onExit }: Props): React.ReactNode {
   const renderer = useRenderer();
   const [phase, setPhase] = useState<Phase>({ kind: "selecting" });
   // Statuses live in a ref so the delete callback can mutate without depending
@@ -58,6 +59,7 @@ export function App({ result, dryRun, onExit }: Props): React.ReactNode {
       dryRun,
       force,
       cwd: result.mainWt,
+      concurrency: deleteConcurrency,
       onEvent: (e) => {
         const next = statusesRef.current.slice();
         if (e.kind === "start") {
@@ -132,7 +134,12 @@ export function App({ result, dryRun, onExit }: Props): React.ReactNode {
 
   if (phase.kind === "deleting") {
     return (
-      <Deleting items={phase.items} statuses={phase.statuses} rootPath={result.root} />
+      <Deleting
+        items={phase.items}
+        statuses={phase.statuses}
+        rootPath={result.root}
+        concurrency={deleteConcurrency}
+      />
     );
   }
 

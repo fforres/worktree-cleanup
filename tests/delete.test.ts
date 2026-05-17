@@ -61,7 +61,7 @@ describe("performDeletes — real mode", () => {
 });
 
 describe("performDeletes — onEvent callback", () => {
-  it("fires start + finish per item in order, with matching indexes", async () => {
+  it("fires exactly one start + one finish per item, with matching indexes", async () => {
     const items = [
       wt({ path: "/a" }),
       wt({ path: "/b" }),
@@ -70,16 +70,29 @@ describe("performDeletes — onEvent callback", () => {
     const events: Array<{ kind: "start" | "finish"; index: number; path: string }> = [];
     await performDeletes(items, {
       dryRun: true,
+      concurrency: 3,
       onEvent: (e) => events.push({ kind: e.kind, index: e.index, path: e.worktree.path }),
     });
-    expect(events).toEqual([
-      { kind: "start", index: 0, path: "/a" },
-      { kind: "finish", index: 0, path: "/a" },
-      { kind: "start", index: 1, path: "/b" },
-      { kind: "finish", index: 1, path: "/b" },
-      { kind: "start", index: 2, path: "/c" },
-      { kind: "finish", index: 2, path: "/c" },
-    ]);
+    // Under concurrency > 1, ordering between items is not guaranteed — only
+    // that each item gets exactly one start and one finish, and that they
+    // line up by index.
+    expect(events).toHaveLength(6);
+    for (let i = 0; i < items.length; i++) {
+      const forItem = events.filter((e) => e.index === i);
+      expect(forItem.map((e) => e.kind)).toEqual(["start", "finish"]);
+      expect(forItem[0]!.path).toBe(items[i]!.path);
+    }
+  });
+
+  it("serial when concurrency=1: events fire in strict index order", async () => {
+    const items = [wt({ path: "/a" }), wt({ path: "/b" })];
+    const order: string[] = [];
+    await performDeletes(items, {
+      dryRun: true,
+      concurrency: 1,
+      onEvent: (e) => order.push(`${e.kind}:${e.index}`),
+    });
+    expect(order).toEqual(["start:0", "finish:0", "start:1", "finish:1"]);
   });
 });
 

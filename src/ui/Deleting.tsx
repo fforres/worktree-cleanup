@@ -12,24 +12,31 @@ interface Props {
   items: readonly Worktree[];
   statuses: readonly ItemState[];
   rootPath: string;
+  concurrency: number;
 }
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-export function Deleting({ items, statuses, rootPath }: Props): React.ReactNode {
+export function Deleting({
+  items,
+  statuses,
+  rootPath,
+  concurrency,
+}: Props): React.ReactNode {
   const frame = useSpinnerFrame();
 
   const finishedCount = statuses.filter((s) => s.kind === "done").length;
   const okCount = statuses.filter((s) => s.kind === "done" && s.outcome.ok).length;
   const failCount = finishedCount - okCount;
-  const currentIndex = statuses.findIndex((s) => s.kind === "inProgress");
-  const current = currentIndex >= 0 ? items[currentIndex] : undefined;
+  const inFlightCount = statuses.filter((s) => s.kind === "inProgress").length;
 
   return (
     <box style={{ flexDirection: "column", flexGrow: 1 }}>
       <box style={{ borderStyle: "single", paddingLeft: 1, paddingRight: 1, flexShrink: 0 }}>
         <text style={{ flexShrink: 0 }} fg={COLORS.headingFg} attributes={1}>
           Deleting {items.length} worktree{items.length === 1 ? "" : "s"}…
+          {"  "}
+          <span fg={COLORS.warningFg}>⠿ {inFlightCount} in flight</span>
           {"  "}
           <span fg={COLORS.checkboxSelected}>✓ {okCount}</span>
           {"  "}
@@ -38,13 +45,6 @@ export function Deleting({ items, statuses, rootPath }: Props): React.ReactNode 
           <span fg={COLORS.hintFg}>{finishedCount}/{items.length}</span>
         </text>
       </box>
-      {current ? (
-        <box style={{ paddingLeft: 1, paddingRight: 1, paddingTop: 1, flexShrink: 0 }}>
-          <text style={{ flexShrink: 0 }} fg={COLORS.warningFg}>
-            {SPINNER_FRAMES[frame]} running `git worktree remove` on {relPath(current.path, rootPath)}
-          </text>
-        </box>
-      ) : null}
       <scrollbox style={{ flexGrow: 1, paddingLeft: 1, paddingRight: 1, paddingTop: 1 }}>
         {items.map((wt, i) => (
           <ItemRow
@@ -58,7 +58,7 @@ export function Deleting({ items, statuses, rootPath }: Props): React.ReactNode 
       </scrollbox>
       <box style={{ borderStyle: "single", paddingLeft: 1, paddingRight: 1, flexShrink: 0 }}>
         <text style={{ flexShrink: 0 }} fg={COLORS.hintFg}>
-          Working serially — git worktree operations contend on the parent repo's index.
+          Running in parallel · concurrency={concurrency} · each row reports start, finish, and any error independently.
         </text>
       </box>
     </box>

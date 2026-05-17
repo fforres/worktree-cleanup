@@ -81,6 +81,7 @@ async function main(): Promise<void> {
       <App
         result={result}
         dryRun={options.dryRun}
+        deleteConcurrency={Math.min(options.concurrency, 8)}
         onExit={(phase) => {
           if (exited) return;
           exited = true;
@@ -98,8 +99,13 @@ async function main(): Promise<void> {
     process.stdout.write("\nNothing selected. Exiting.\n");
     return;
   }
-  process.stdout.write(`\nResults (${finalOutcomes.length}):\n`);
-  for (const o of finalOutcomes) {
+  // Outcomes from parallel deletes can finish in any order — sort by the path
+  // the user saw in the table so the printed list reads naturally.
+  const sorted = [...finalOutcomes].sort((a, b) =>
+    a.worktree.path.localeCompare(b.worktree.path),
+  );
+  process.stdout.write(`\nResults (${sorted.length}):\n`);
+  for (const o of sorted) {
     process.stdout.write(`  ${o.message}\n`);
   }
   if (options.dryRun) {
